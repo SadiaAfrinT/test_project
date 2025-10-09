@@ -185,9 +185,18 @@
             <button class="run-button">Run Analysis</button>
         </div>
 
-        <!-- ================== OUTPUT SECTION ================== -->
+        <!-- ================== DETECTED OBJECTS SECTION ================== -->
         <div class="section">
-            <h2>2. Evaluation Results</h2>
+            <h2>2. Detected Objects</h2>
+            <div class="detected-objects-output" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; min-height: 150px; background-color: var(--background-color); margin-bottom: 1.5rem;">
+                <p style="color: var(--secondary-color); text-align: center;">Detected objects will be displayed here...</p>
+            </div>
+            <a href="#" class="download-button disabled">Download Detected Objects</a>
+        </div>
+
+        <!-- ================== EVALUATION RESULTS SECTION ================== -->
+        <div class="section">
+            <h2>3. Evaluation Results</h2>
             <div class="results-grid" style="margin-bottom: 1.5rem;">
                 <div class="metric-card">
                     <div class="value">--</div>
@@ -203,15 +212,6 @@
                 </div>
             </div>
             <a href="#" class="download-button disabled">Download CSV Report</a>
-        </div>
-
-        <!-- ================== DETECTED OBJECTS SECTION ================== -->
-        <div class="section">
-            <h2>3. Detected Objects</h2>
-            <div class="detected-objects-output" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 1rem; min-height: 150px; background-color: var(--background-color); margin-bottom: 1.5rem;">
-                <p style="color: var(--secondary-color); text-align: center;">Detected objects will be displayed here...</p>
-            </div>
-            <a href="#" class="download-button disabled">Download Detected Objects</a>
         </div>
     </div>
 
