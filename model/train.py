@@ -13,6 +13,7 @@ from transformers import (
     Trainer,
 )
 from torch.utils.data import Dataset
+from peft import LoraConfig, get_peft_model
 
 # --- 1. Configuration ---
 MODEL_ID = "llava-hf/llava-1.5-7b-hf"  # Example model
@@ -113,6 +114,22 @@ def train():
         torch_dtype=torch.float16,
         load_in_4bit=True, # Use 4-bit quantization
     )
+
+    print("--- Setting up LoRA for PEFT ---")
+    # Define LoRA configuration
+    lora_config = LoraConfig(
+        r=16,  # The rank of the LoRA matrices. A higher rank means more trainable parameters.
+        lora_alpha=32, # A scaling factor for the LoRA weights.
+        target_modules=["q_proj", "v_proj"], # The layers to apply LoRA to. For LLaVA, these are common choices.
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+
+    # Wrap the model with PEFT
+    model = get_peft_model(model, lora_config)
+    print("LoRA adapters attached.")
+    model.print_trainable_parameters() # This will show how many parameters are being trained.
 
     # Load the custom dataset
     print(f"Loading dataset from {COCO_ANNOTATIONS_PATH}...")

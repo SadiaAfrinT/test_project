@@ -8,4 +8,5 @@ torch
 transformers
 accelerate
 bitsandbytes
+peft
 Pillow
