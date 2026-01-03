@@ -1,0 +1,11 @@
+# Backend Dependencies
+Flask
+
+# Model Training & Inference Dependencies
+# These are for the actual model training and are quite large.
+# You can install them by running: pip install -r requirements.txt
+torch
+transformers
+accelerate
+bitsandbytes
+Pillow

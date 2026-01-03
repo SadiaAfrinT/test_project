@@ -1,0 +1,152 @@
+:root {
+    --primary-color: #808000;
+    --secondary-color: #6c757d;
+    --background-color: #f8f9fa;
+    --container-bg: #ffffff;
+    --text-color: #333;
+    --border-color: #dee2e6;
+    --success-color: #28a745;
+    --disabled-color: #e9ecef;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.main-container {
+    width: 100%;
+    max-width: 800px;
+    background-color: var(--container-bg);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    padding: 2rem;
+    border: 1px solid var(--border-color);
+}
+
+header {
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+header h1 {
+    margin: 0;
+    font-size: 1.75rem;
+    color: var(--primary-color);
+}
+
+header p {
+    margin-top: 0.5rem;
+    color: var(--secondary-color);
+    font-size: 1rem;
+}
+
+.section {
+    margin-bottom: 2rem;
+}
+
+.section h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    color: var(--text-color);
+}
+
+.folder-input {
+    border: 2px dashed var(--border-color);
+    border-radius: 6px;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    background-color: #fdfdff;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.folder-input:hover {
+    background-color: #f5f8ff;
+    border-color: var(--primary-color);
+}
+
+.folder-input .label {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.folder-input .path {
+    font-style: italic;
+    color: var(--secondary-color);
+    font-size: 0.9rem;
+}
+
+.run-button {
+    display: block;
+    width: 100%;
+    padding: 0.8rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #fff;
+    background-color: var(--primary-color);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.run-button:hover {
+    background-color: #556B2F;
+}
+
+.results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    text-align: center;
+}
+
+.metric-card {
+    background-color: var(--background-color);
+    padding: 1rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.metric-card .value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.metric-card .label {
+    font-size: 1rem;
+    color: var(--secondary-color);
+    margin-top: 0.25rem;
+}
+
+.download-button {
+    display: block;
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    background-color: var(--success-color);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    text-align: center;
+    text-decoration: none;
+}
+
+.download-button.disabled {
+    background-color: var(--secondary-color);
+    cursor: not-allowed;
+}
