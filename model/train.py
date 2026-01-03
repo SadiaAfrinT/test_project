@@ -1,9 +1,9 @@
 # THIS IS A PLACEHOLDER SCRIPT.
-# It demonstrates how you would fine-tune a LLaVA model on your custom COCO-formatted dataset.
+# It demonstrates how you would fine-tune a LLaVA model on your custom YOLO-formatted dataset.
 # You will need a machine with a powerful GPU and sufficient memory to run this.
 
 import os
-import json
+import glob
 import torch
 from PIL import Image
 from transformers import (
@@ -17,146 +17,162 @@ from peft import LoraConfig, get_peft_model
 
 # --- 1. Configuration ---
 MODEL_ID = "llava-hf/llava-1.5-7b-hf"  # Example model
-COCO_ANNOTATIONS_PATH = "../data/result.json"
-# The COCO JSON has relative paths, so we need a base path to the images.
-# This will depend on where you store the images.
-# For this example, we assume they are in a folder 'images/' at the root of the project.
-IMAGE_DIR = "../images" # IMPORTANT: You need to create this directory and place your images inside it.
-OUTPUT_DIR = "./llava-finetuned-model"
+IMAGE_DIR = "../images" 
+ANNOTATION_DIR = "../annotations" # Directory for YOLO .txt files
+OUTPUT_DIR = "./llava-finetuned-yolo-model"
 
-# --- 2. Custom Dataset for COCO-formatted data ---
-class CocoObjectDetectionDataset(Dataset):
+# =========================================================================================
+# IMPORTANT: Please update this list with your class names in the correct order.
+# The index of the name in the list should match the class ID in your YOLO .txt files.
+# For example, if 'Accordion' is class 0, it should be the first item in the list.
+# =========================================================================================
+CLASS_NAMES = [
+    "Accordion", "Action Controls", "Cards", "Carousels", "Chat Message", 
+    "Chatbot Interface", "Information Stamps", "Message Reactions", 
+    "Persistent Menu", "Quick Replies", "Typing Indicator", "Window Controls"
+]
+# =========================================================================================
+
+
+# --- 2. Custom Dataset for YOLO-formatted data ---
+class YoloObjectDetectionDataset(Dataset):
     """
-    A custom PyTorch dataset to handle COCO-formatted object detection data
+    A custom PyTorch dataset to handle YOLO-formatted object detection data
     for use with a VLM like LLaVA.
+    Each line in a YOLO annotation file is treated as a separate data point.
     """
-    def __init__(self, annotations_file, image_directory, processor):
-        self.image_directory = image_directory
+    def __init__(self, image_dir, annotation_dir, class_names, processor):
+        self.image_dir = image_dir
+        self.annotation_dir = annotation_dir
+        self.class_names = class_names
         self.processor = processor
+        self.samples = []
 
-        with open(annotations_file, 'r') as f:
-            coco_data = json.load(f)
+        # Find all annotation files
+        annotation_files = glob.glob(os.path.join(self.annotation_dir, '*.txt'))
 
-        self.annotations = coco_data['annotations']
-        
-        # Create mappings for quick lookups
-        self.images = {img['id']: img for img in coco_data['images']}
-        self.categories = {cat['id']: cat for cat in coco_data['categories']}
+        for ann_file in annotation_files:
+            # Find the corresponding image file (assuming same base name)
+            base_name = os.path.basename(ann_file).replace('.txt', '')
+            # Try to find image with common extensions
+            img_path = None
+            for ext in ['.png', '.jpg', '.jpeg', '.webp']:
+                potential_path = os.path.join(self.image_dir, base_name + ext)
+                if os.path.exists(potential_path):
+                    img_path = potential_path
+                    break
+            
+            if not img_path:
+                print(f"Warning: No corresponding image found for annotation {os.path.basename(ann_file)}. Skipping.")
+                continue
+
+            # Read all annotations in the file
+            with open(ann_file, 'r') as f:
+                lines = f.readlines()
+            
+            # Each line is a sample
+            for i, line in enumerate(lines):
+                self.samples.append({'image_path': img_path, 'annotation_line': line})
 
     def __len__(self):
-        return len(self.annotations)
+        return len(self.samples)
 
     def __getitem__(self, idx):
-        annotation = self.annotations[idx]
-        image_id = annotation['image_id']
-        category_id = annotation['category_id']
-        
-        # Get image info
-        image_info = self.images[image_id]
-        # IMPORTANT: The file_name in your COCO file has backwards slashes and relative paths.
-        # We need to normalize it and combine it with our IMAGE_DIR.
-        # This part might need adjustment based on your exact file paths.
-        filename = os.path.basename(image_info['file_name'].replace('\\', '/'))
-        image_path = os.path.join(self.image_directory, filename)
-        
+        sample = self.samples[idx]
+        image_path = sample['image_path']
+        annotation_line = sample['annotation_line']
+
+        # Load image
         try:
             image = Image.open(image_path).convert("RGB")
+            img_w, img_h = image.size
         except FileNotFoundError:
             print(f"Warning: Image not found at {image_path}. Skipping.")
-            # Return the next valid item
             return self.__getitem__((idx + 1) % len(self))
 
-        # Get category name
-        category = self.categories[category_id]['name']
+        # Parse YOLO annotation line
+        parts = annotation_line.strip().split()
+        class_id = int(parts[0])
+        cx_norm, cy_norm, w_norm, h_norm = map(float, parts[1:])
 
-        # Correctly format the conversation for the model.
-        # The model needs to learn to predict the bounding box after the "ASSISTANT:" token.
-        bbox_str = str(annotation['bbox'])
+        # Convert normalized YOLO bbox to absolute pixel bbox [x, y, width, height]
+        abs_w = w_norm * img_w
+        abs_h = h_norm * img_h
+        abs_x = (cx_norm * img_w) - (abs_w / 2)
+        abs_y = (cy_norm * img_h) - (abs_h / 2)
         
-        # The conversation template is crucial for LLaVA.
-        # It must match the format the model was originally trained on.
+        bbox = [round(abs_x, 2), round(abs_y, 2), round(abs_w, 2), round(abs_h, 2)]
+
+        # Get class name
+        category = self.class_names[class_id]
+
+        # Correctly format the conversation for the model
+        bbox_str = str(bbox)
         prompt = f"USER: <image>\nPlease provide the bounding box for the {category} in the image."
         conversation = f"{prompt} ASSISTANT: {bbox_str}</s>"
 
         # Process the full conversation and image
         inputs = self.processor(text=conversation, images=image, return_tensors="pt")
         
-        # Create labels, which are a copy of input_ids
+        # Create labels and mask the prompt
         labels = inputs.input_ids.clone()
-
-        # Find where the assistant's response begins to mask the prompt.
-        # We tokenize the prompt part separately to find its length.
         prompt_only_inputs = self.processor(text=f"{prompt} ASSISTANT:")
         prompt_len = len(prompt_only_inputs.input_ids[0])
-
-        # Mask the prompt part in the labels by setting it to -100.
-        # The loss function will ignore these tokens.
         labels[0, :prompt_len] = -100
 
-        # The trainer expects a dictionary of tensors. Squeeze the batch dimension.
         inputs['labels'] = labels
-        
         return {key: val.squeeze(0) for key, val in inputs.items()}
 
 
 # --- 3. Main Training Logic ---
 def train():
-    print("--- Starting LLaVA Fine-Tuning Script ---")
+    print("--- Starting LLaVA Fine-Tuning Script for YOLO data ---")
 
     # Load the processor and model
     print(f"Loading model and processor from {MODEL_ID}...")
     processor = AutoProcessor.from_pretrained(MODEL_ID)
-    
-    # For fine-tuning on a custom task, it's good practice to load the model with quantization
-    # to save memory, especially on consumer-grade GPUs.
     model = LlavaForConditionalGeneration.from_pretrained(
         MODEL_ID, 
         torch_dtype=torch.float16,
-        load_in_4bit=True, # Use 4-bit quantization
+        load_in_4bit=True,
     )
 
+    # Set up LoRA for PEFT
     print("--- Setting up LoRA for PEFT ---")
-    # Define LoRA configuration
     lora_config = LoraConfig(
-        r=16,  # The rank of the LoRA matrices. A higher rank means more trainable parameters.
-        lora_alpha=32, # A scaling factor for the LoRA weights.
-        target_modules=["q_proj", "v_proj"], # The layers to apply LoRA to. For LLaVA, these are common choices.
-        lora_dropout=0.05,
-        bias="none",
-        task_type="CAUSAL_LM",
+        r=16, lora_alpha=32,
+        target_modules=["q_proj", "v_proj"],
+        lora_dropout=0.05, bias="none", task_type="CAUSAL_LM",
     )
-
-    # Wrap the model with PEFT
     model = get_peft_model(model, lora_config)
     print("LoRA adapters attached.")
-    model.print_trainable_parameters() # This will show how many parameters are being trained.
+    model.print_trainable_parameters()
 
-    # Load the custom dataset
-    print(f"Loading dataset from {COCO_ANNOTATIONS_PATH}...")
-    # NOTE: You might want to split your data into train and validation sets.
-    # For simplicity, this script uses the same file for both.
-    train_dataset = CocoObjectDetectionDataset(
-        annotations_file=COCO_ANNOTATIONS_PATH,
-        image_directory=IMAGE_DIR,
+    # Load the custom YOLO dataset
+    print(f"Loading YOLO dataset from images in '{IMAGE_DIR}' and annotations in '{ANNOTATION_DIR}'...")
+    train_dataset = YoloObjectDetectionDataset(
+        image_dir=IMAGE_DIR,
+        annotation_dir=ANNOTATION_DIR,
+        class_names=CLASS_NAMES,
         processor=processor
     )
     
     if len(train_dataset) == 0:
-        print("Dataset is empty. Please check your annotation paths and image directory.")
+        print("Dataset is empty. Please check your image and annotation directories.")
         return
 
     # Define training arguments
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
-        num_train_epochs=1, # Start with 1 epoch and increase as needed
-        per_device_train_batch_size=2, # Adjust based on your GPU memory
+        num_train_epochs=1,
+        per_device_train_batch_size=2,
         gradient_accumulation_steps=8,
         learning_rate=1.4e-5,
         save_total_limit=3,
         logging_steps=5,
         save_strategy="steps",
         save_steps=20,
-        remove_unused_columns=False, # Important for custom datasets
+        remove_unused_columns=False,
     )
 
     # Create the Trainer
@@ -164,7 +180,6 @@ def train():
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        # You would also pass a 'eval_dataset' here for evaluation
     )
 
     # Start training
@@ -180,14 +195,9 @@ def train():
 
 
 if __name__ == "__main__":
-    # This check ensures that the training code only runs when the script is executed directly.
-    # IMPORTANT: Before running, ensure you have created an 'images' directory and placed your
-    # image files from the dataset into it. The script will fail if it cannot find the images.
-    
     if not os.path.exists(IMAGE_DIR):
         print(f"Error: The image directory '{IMAGE_DIR}' does not exist.")
-        print("Please create it and copy your dataset images into it before running this script.")
-    elif not os.path.exists(COCO_ANNOTATIONS_PATH):
-        print(f"Error: The annotations file '{COCO_ANNOTATIONS_PATH}' does not exist.")
+    elif not os.path.exists(ANNOTATION_DIR):
+        print(f"Error: The annotation directory '{ANNOTATION_DIR}' does not exist.")
     else:
         train()

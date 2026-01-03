@@ -10,21 +10,18 @@ The application provides a user-friendly interface to upload an image or video, 
 
 ```
 .
+├── annotations/          # **IMPORTANT**: Your YOLO .txt annotation files go here
 ├── backend/
 │   └── app.py              # Flask backend with the API
-├── data/
-│   └── result.json         # Your COCO-formatted annotations
+├── data/                   # Old directory for COCO format, can be removed
+│   └── result.json
 ├── frontend/
 │   ├── index.html          # Main application UI
 │   ├── script.js           # Frontend JavaScript logic
 │   └── styles.css          # UI styles
 ├── images/                 # **IMPORTANT**: Your image files go here
 ├── model/
-│   └── train.py            # Script to fine-tune the LLaVA model
-├── my_tool.py
-├── my_tool_test.py
-├── planning.docx
-├── ui_design.html
+│   └── train.py            # Script to fine-tune the LLaVA model with YOLO data
 └── requirements.txt        # Python dependencies
 ```
 
@@ -41,26 +38,25 @@ Clone the repository and install the required Python packages using the `require
 ```bash
 pip install -r requirements.txt
 ```
-**Note:** The `torch`, `transformers`, and `bitsandbytes` packages are large. The installation may take some time.
+**Note:** The `torch`, `transformers`, `peft` and `bitsandbytes` packages are large. The installation may take some time.
 
 ## How to Run the Application
 
-### 1. Prepare the Image Data
-Your `data/result.json` file contains references to image file paths. You must gather all the corresponding image files and place them into the `images/` directory at the root of the project.
+The application's primary purpose is to serve as a platform for training and evaluating your model. The steps below focus on preparing your data for training.
 
-**The `model/train.py` script expects all dataset images to be in this folder.**
+### 1. Prepare Your Data for YOLO Training
+The `model/train.py` script now expects your data in **YOLO format**.
+
+1.  **Place Images:** Copy all your image files (`.png`, `.jpg`, etc.) into the `images/` directory.
+2.  **Place Annotations:** Copy all your corresponding YOLO annotation files (`.txt`) into the `annotations/` directory. The basename of each `.txt` file must match the basename of its corresponding image file (e.g., `image1.png` and `image1.txt`).
+3.  **Update Class Names:** This is a critical step. Open `model/train.py` and find the `CLASS_NAMES` list. You **must** edit this list so that the names of your object classes are in the correct order, matching the integer class IDs in your `.txt` files. For example, if "Cards" is class `2` in your YOLO files, it must be the third item in the list (index 2).
 
 ### 2. Run the Web Application
-The backend is a Flask application that serves the frontend and provides the (simulated) analysis API.
-
-To run the web server, execute the following command from the project's root directory:
+The backend serves the frontend and provides a simulated API. To start it, run the following command from the project's root directory:
 ```bash
 python backend/app.py
 ```
-This will start the development server. You can access the web application by opening your browser and navigating to:
-**http://127.0.0.1:5000**
-
-You can now select an image or video file and click "Run Analysis" to see the simulated results.
+You can then access the web application at: **http://127.0.0.1:5000**
 
 ## Model Training and Fine-Tuning
 
@@ -68,7 +64,7 @@ The core of this project is the fine-tuned LLaVA model. You must train it yourse
 
 ### How to Train the Model
 1.  **Ensure Prerequisites:** Make sure you have a machine with a powerful GPU and have installed all dependencies.
-2.  **Verify Data:** Confirm that your images are in the `images/` directory and your `data/result.json` annotation file is correct.
+2.  **Verify Data:** Confirm that your data is set up correctly as described in the "Prepare Your Data" section above.
 3.  **Run the Training Script:** Execute the `train.py` script from the root directory:
 
     ```bash
@@ -76,19 +72,18 @@ The core of this project is the fine-tuned LLaVA model. You must train it yourse
     ```
 
 **IMPORTANT:**
-- Model training is a computationally expensive and time-consuming process.
-- The script uses 4-bit quantization (`load_in_4bit=True`) to reduce memory usage, but it will still require a modern GPU.
-- The `train.py` script will save the fine-tuned model and processor files into a new directory: `model/llava-finetuned-model/`.
+- Model training is a computationally expensive process.
+- The script uses 4-bit quantization and LoRA to reduce memory usage, but it still requires a modern GPU.
+- The script will save the fine-tuned model adapters into a new directory: `model/llava-finetuned-yolo-model/`.
 
 ### Integrating the Fine-Tuned Model
 Once training is complete, you would modify the `backend/app.py` file to load your fine-tuned model instead of generating mock data. This involves:
-1.  Loading the model and processor from `model/llava-finetuned-model/`.
+1.  Loading the base model and attaching the trained LoRA adapters from `model/llava-finetuned-yolo-model/`.
 2.  Implementing the image processing and inference logic within the `/api/analyze` endpoint.
 
 ## Extensible Pipeline
 
 This project is designed to be easily extensible. To improve your model with more data:
 1.  **Add New Images:** Add your new screen captures to the `images/` folder.
-2.  **Label Your Data:** Use your labeling tool (e.g., Label Studio) to create new annotations for the new images.
-3.  **Update Annotations:** Export the new annotations and merge them with the existing `data/result.json` file, or replace it with a new file containing all annotations.
-4.  **Re-run Training:** Execute the `python model/train.py` script again to fine-tune the model on the updated dataset. The trainer will continue from the last checkpoint if available.
+2.  **Add New Annotations:** Add the corresponding new YOLO `.txt` files to the `annotations/` folder.
+3.  **Re-run Training:** Execute `python model/train.py` again. The script will automatically pick up the new data to fine-tune the model.
